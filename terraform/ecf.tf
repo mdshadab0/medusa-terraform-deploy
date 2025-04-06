@@ -1,20 +1,26 @@
+# Reference existing CloudWatch Log Group
+data "aws_cloudwatch_log_group" "ecs_log_group" {
+  name = "/ecs/medusa-task"
+}
+
+# Reference existing ECS task execution role
+data "aws_iam_role" "ecs_task_execution_role" {
+  name = "ecsTaskExecutionRole"
+}
+
+# ECS Cluster
 resource "aws_ecs_cluster" "medusa_cluster" {
   name = "medusa-cluster"
 }
 
-resource "aws_cloudwatch_log_group" "ecs_log_group" {
-  name              = "/ecs/medusa-task"
-  retention_in_days = 7
-}
-
+# ECS Task Definition
 resource "aws_ecs_task_definition" "medusa_task" {
   family                   = "medusa-task"
   requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  cpu                      = "512"
-  memory                   = "1024"
-  execution_role_arn = aws_iam_role.ecs_task_execution_role.arn
-
+  network_mode            = "awsvpc"
+  cpu                     = "512"
+  memory                  = "1024"
+  execution_role_arn      = data.aws_iam_role.ecs_task_execution_role.arn
 
   container_definitions = jsonencode([
     {
@@ -27,6 +33,14 @@ resource "aws_ecs_task_definition" "medusa_task" {
           hostPort      = 9000
         }
       ]
+      logConfiguration = {
+        logDriver = "awslogs",
+        options = {
+          awslogs-group         = data.aws_cloudwatch_log_group.ecs_log_group.name,
+          awslogs-region        = "us-east-1",
+          awslogs-stream-prefix = "ecs"
+        }
+      }
       environment = [
         {
           name  = "NODE_ENV"
@@ -49,18 +63,11 @@ resource "aws_ecs_task_definition" "medusa_task" {
           value = "secret"
         }
       ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = "/ecs/medusa-task"
-          awslogs-region        = "us-east-1"
-          awslogs-stream-prefix = "ecs"
-        }
-      }
     }
   ])
 }
 
+# ECS Service
 resource "aws_ecs_service" "medusa_service" {
   name            = "medusa-service"
   cluster         = aws_ecs_cluster.medusa_cluster.id
@@ -73,25 +80,4 @@ resource "aws_ecs_service" "medusa_service" {
     assign_public_ip = true
     security_groups = [aws_security_group.ecs_sg.id]
   }
-}
-resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "ecsTaskExecutionRole"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "ecs_execution_role_policy" {
-  role       = aws_iam_role.ecs_task_execution_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
