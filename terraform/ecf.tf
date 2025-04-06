@@ -2,12 +2,17 @@ resource "aws_ecs_cluster" "medusa_cluster" {
   name = "medusa-cluster"
 }
 
+resource "aws_cloudwatch_log_group" "ecs_log_group" {
+  name              = "/ecs/medusa-task"
+  retention_in_days = 7
+}
+
 resource "aws_ecs_task_definition" "medusa_task" {
   family                   = "medusa-task"
   requires_compatibilities = ["FARGATE"]
-  network_mode            = "awsvpc"
-  cpu                     = "512"
-  memory                  = "1024"
+  network_mode             = "awsvpc"
+  cpu                      = "512"
+  memory                   = "1024"
 
   container_definitions = jsonencode([
     {
@@ -42,6 +47,14 @@ resource "aws_ecs_task_definition" "medusa_task" {
           value = "secret"
         }
       ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = "/ecs/medusa-task"
+          awslogs-region        = "us-east-1"
+          awslogs-stream-prefix = "ecs"
+        }
+      }
     }
   ])
 }
